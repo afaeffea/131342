@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Юридический чат-бот</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="app-header">
+        <div class="logo">
+          <span class="logo-badge">LX</span>
+          <span class="logo-text">Legal Expert Chat</span>
+        </div>
+        <div class="header-right">
+          <span id="user-email" class="user-email"></span>
+          <button id="logout-btn" class="btn ghost small">Выйти</button>
+        </div>
+      </header>
+
+      <main class="app-main">
+        <section id="auth-view" class="panel auth-panel">
+          <div class="auth-card">
+            <div class="auth-tabs">
+              <button id="tab-login" class="tab active">Вход</button>
+              <button id="tab-register" class="tab">Регистрация</button>
+            </div>
+
+            <form id="login-form" class="form visible">
+              <h2>Вход в аккаунт</h2>
+              <label class="field">
+                <span>Email</span>
+                <input type="email" name="email" required />
+              </label>
+              <label class="field">
+                <span>Пароль</span>
+                <input type="password" name="password" required />
+              </label>
+              <button type="submit" class="btn primary full">Войти</button>
+              <p class="form-hint">
+                Нет аккаунта?
+                <a href="#" id="to-register">Зарегистрироваться</a>
+              </p>
+            </form>
+
+            <form id="register-form" class="form">
+              <h2>Создать аккаунт</h2>
+              <label class="field">
+                <span>Email</span>
+                <input type="email" name="email" required />
+              </label>
+              <label class="field">
+                <span>Пароль</span>
+                <input type="password" name="password" required minlength="6" />
+              </label>
+              <button type="submit" class="btn primary full">Зарегистрироваться</button>
+              <p class="form-hint">
+                Уже есть аккаунт?
+                <a href="#" id="to-login">Войти</a>
+              </p>
+            </form>
+
+            <div id="auth-error" class="error-message"></div>
+          </div>
+        </section>
+
+        <section id="chat-view" class="panel chat-panel hidden">
+          <div class="chat-sidebar">
+            <h2>Диалог</h2>
+            <p class="sidebar-subtitle">
+              Задавайте вопросы по договорам, рискам, комплаенсу и другим юридическим темам.
+            </p>
+            <button id="new-chat-btn" class="btn ghost full">Новый диалог</button>
+            <div class="helper-box">
+              <h3>Подсказки</h3>
+              <ul>
+                <li>Проверка рисков в договоре</li>
+                <li>Подготовка ответа на претензию</li>
+                <li>Оценка перспектив суда</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="chat-main">
+            <div id="chat-messages" class="chat-messages">
+              <div class="message assistant">
+                <div class="avatar">LX</div>
+                <div class="bubble">
+                  <div class="meta">Legal Expert</div>
+                  <div class="text">
+                    Привет! Я юридический ассистент. Опиши свою ситуацию, и я помогу сформулировать
+                    позицию, риски и следующие шаги.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <form id="chat-form" class="chat-input-row">
+              <textarea
+                id="chat-input"
+                rows="1"
+                placeholder="Опиши свою ситуацию или вставь текст договора..."
+              ></textarea>
+              <button type="submit" class="btn primary" id="send-btn">Отправить</button>
+            </form>
+            <div id="chat-error" class="error-message chat-error"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+  </html>
+

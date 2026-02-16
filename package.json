@@ -1,0 +1,30 @@
+{
+  "name": "lawyer-chatbot-n8n",
+  "version": "1.0.0",
+  "description": "Простой чат-бот для юристов с авторизацией и проксированием запросов в n8n вебхук.",
+  "main": "backend/src/server.js",
+  "scripts": {
+    "dev": "nodemon backend/src/server.js",
+    "start": "node backend/src/server.js"
+  },
+  "keywords": [
+    "chatbot",
+    "lawyers",
+    "n8n",
+    "express"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.7.7",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-session": "^1.17.3",
+    "morgan": "^1.10.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
+}

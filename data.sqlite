@@ -1,0 +1,55 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "email": "vadios810@gmai.com",
+      "password_hash": "$2a$10$qP/iENKc/AknHdimVVTztu6Iwx4ILt9lwWzFN6Dhz2Jx4zEqhofJm",
+      "created_at": "2026-02-16T14:19:38.967Z"
+    },
+    {
+      "id": 2,
+      "email": "vadios810@gmail.com",
+      "password_hash": "$2a$10$fLyorDOhzKweGedrwwd0Ze2HzDHDJSBXHJOFmSglcl5ZKZwB224j.",
+      "created_at": "2026-02-16T14:20:15.101Z"
+    }
+  ],
+  "messages": [
+    {
+      "id": 1,
+      "user_id": 2,
+      "role": "user",
+      "content": "2+2",
+      "created_at": "2026-02-16T14:24:53.549Z"
+    },
+    {
+      "id": 2,
+      "user_id": 2,
+      "role": "user",
+      "content": "12",
+      "created_at": "2026-02-16T14:24:58.343Z"
+    },
+    {
+      "id": 3,
+      "user_id": 2,
+      "role": "user",
+      "content": "1313",
+      "created_at": "2026-02-16T14:25:15.876Z"
+    },
+    {
+      "id": 4,
+      "user_id": 2,
+      "role": "user",
+      "content": "2+2",
+      "created_at": "2026-02-16T14:25:49.207Z"
+    },
+    {
+      "id": 5,
+      "user_id": 2,
+      "role": "assistant",
+      "content": "{\"answer\":\"Привет! Как я могу помочь тебе с правовыми вопросами в рамках законодательства Российской Федерации?\"}",
+      "created_at": "2026-02-16T14:25:54.303Z"
+    }
+  ],
+  "_nextUserId": 3,
+  "_nextMessageId": 6
+}
