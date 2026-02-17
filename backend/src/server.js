@@ -1,5 +1,6 @@
 require('dotenv').config();
 
+const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const session = require('express-session');
@@ -49,8 +50,14 @@ app.use(
   })
 );
 
-// Static frontend
-app.use(express.static(path.join(__dirname, '..', '..', 'frontend', 'public')));
+// Static frontend — serve React build (prod) with legacy fallback
+const distDir = path.join(__dirname, '..', '..', 'frontend', 'dist');
+const legacyDir = path.join(__dirname, '..', '..', 'frontend', 'public');
+
+if (fs.existsSync(distDir)) {
+  app.use(express.static(distDir));
+}
+app.use(express.static(legacyDir));
 
 function requireAuth(req, res, next) {
   if (!req.session.userId) {
@@ -127,6 +134,19 @@ app.get('/api/session', (req, res) => {
     loggedIn: true,
     user: { id: req.session.userId, email: req.session.email },
   });
+});
+
+app.get('/api/me', requireAuth, async (req, res) => {
+  try {
+    const user = await db.findUserById(req.session.userId);
+    if (!user) {
+      return res.status(404).json({ error: 'USER_NOT_FOUND', message: 'Пользователь не найден' });
+    }
+    res.json({ user: { id: user.id, email: user.email } });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'INTERNAL_ERROR' });
+  }
 });
 
 // ========================
@@ -296,9 +316,12 @@ app.post('/api/chat', requireAuth, async (req, res) => {
   }
 });
 
-// Fallback to index.html for SPA-like routing
+// Fallback to index.html for SPA routing
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '..', '..', 'frontend', 'public', 'index.html'));
+  const distIndex = path.join(distDir, 'index.html');
+  const legacyIndex = path.join(legacyDir, 'index.html');
+  const fallback = fs.existsSync(distIndex) ? distIndex : legacyIndex;
+  res.sendFile(fallback);
 });
 
 // Graceful shutdown
