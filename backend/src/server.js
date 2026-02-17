@@ -1,5 +1,6 @@
 require('dotenv').config();
 
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
@@ -9,6 +10,7 @@ const bcrypt = require('bcryptjs');
 const cors = require('cors');
 const morgan = require('morgan');
 const axios = require('axios');
+const multer = require('multer');
 
 const db = require('./db');
 
@@ -16,6 +18,70 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const SESSION_SECRET = process.env.SESSION_SECRET || 'change-me-secret';
 const N8N_WEBHOOK_URL = process.env.N8N_WEBHOOK_URL || '';
+const UPLOADS_ROOT = path.join(__dirname, '..', 'uploads');
+
+// ========================
+// Multer configuration
+// ========================
+const ALLOWED_EXTENSIONS = new Set([
+  '.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg',
+  '.pdf',
+  '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+  '.txt', '.csv', '.rtf', '.odt', '.ods',
+  '.zip', '.rar', '.7z',
+  '.mp3', '.mp4', '.wav',
+  '.json', '.xml',
+]);
+
+const MAX_FILE_SIZE = 20 * 1024 * 1024;   // 20 MB per file
+const MAX_TOTAL_SIZE = 50 * 1024 * 1024;  // 50 MB per request
+const MAX_FILE_COUNT = 10;
+
+const storage = multer.diskStorage({
+  destination(req, file, cb) {
+    const userId = req.session.userId;
+    const now = new Date();
+    const subDir = `${userId}/${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const dest = path.join(UPLOADS_ROOT, subDir);
+    fs.mkdirSync(dest, { recursive: true });
+    cb(null, dest);
+  },
+  filename(req, file, cb) {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const safeName = crypto.randomUUID() + ext;
+    cb(null, safeName);
+  },
+});
+
+function fileFilter(req, file, cb) {
+  const ext = path.extname(file.originalname).toLowerCase();
+  if (!ALLOWED_EXTENSIONS.has(ext)) {
+    return cb(new Error(`Тип файла ${ext} не поддерживается`));
+  }
+  cb(null, true);
+}
+
+const upload = multer({
+  storage,
+  fileFilter,
+  limits: { fileSize: MAX_FILE_SIZE, files: MAX_FILE_COUNT },
+});
+
+function handleMulterError(err, req, res, next) {
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({ error: 'FILE_TOO_LARGE', message: `Максимальный размер файла: ${MAX_FILE_SIZE / 1024 / 1024}MB` });
+    }
+    if (err.code === 'LIMIT_FILE_COUNT') {
+      return res.status(413).json({ error: 'TOO_MANY_FILES', message: `Максимум ${MAX_FILE_COUNT} файлов за раз` });
+    }
+    return res.status(400).json({ error: 'UPLOAD_ERROR', message: err.message });
+  }
+  if (err && err.message) {
+    return res.status(400).json({ error: 'UPLOAD_ERROR', message: err.message });
+  }
+  next(err);
+}
 
 // Middlewares
 app.use(morgan('dev'));
@@ -238,6 +304,79 @@ app.delete('/api/conversations/:id', requireAuth, async (req, res) => {
 });
 
 // ========================
+// Attachment endpoints
+// ========================
+
+app.post('/api/uploads', requireAuth, upload.array('files', MAX_FILE_COUNT), handleMulterError, async (req, res) => {
+  try {
+    const userId = req.session.userId;
+    const files = req.files || [];
+
+    if (files.length === 0) {
+      return res.status(400).json({ error: 'NO_FILES', message: 'Файлы не выбраны' });
+    }
+
+    const totalSize = files.reduce((sum, f) => sum + f.size, 0);
+    if (totalSize > MAX_TOTAL_SIZE) {
+      return res.status(413).json({ error: 'TOTAL_SIZE_EXCEEDED', message: `Общий размер файлов превышает ${MAX_TOTAL_SIZE / 1024 / 1024}MB` });
+    }
+
+    const results = [];
+    for (const file of files) {
+      const ext = path.extname(file.originalname).toLowerCase();
+      const storedName = path.relative(UPLOADS_ROOT, file.path);
+      const att = await db.createAttachment(userId, file.originalname, storedName, file.mimetype, file.size, ext);
+      results.push({
+        id: att.id,
+        original_name: att.original_name,
+        mime_type: att.mime_type,
+        size_bytes: att.size_bytes,
+        url: `/api/attachments/${att.id}`,
+      });
+    }
+
+    res.json({ attachments: results });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'INTERNAL_ERROR' });
+  }
+});
+
+app.get('/api/attachments/:id', requireAuth, async (req, res) => {
+  try {
+    const attachmentId = req.params.id;
+    const userId = req.session.userId;
+
+    await db.assertAttachmentOwner(attachmentId, userId);
+    const att = await db.getAttachmentById(attachmentId);
+    if (!att) {
+      return res.status(404).json({ error: 'ATTACHMENT_NOT_FOUND' });
+    }
+
+    const filePath = path.join(UPLOADS_ROOT, att.stored_name);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'FILE_NOT_FOUND', message: 'Файл не найден на диске' });
+    }
+
+    const isInline = att.mime_type && (att.mime_type.startsWith('image/') || att.mime_type === 'application/pdf');
+    const forceDownload = req.query.download === '1';
+    const disposition = (isInline && !forceDownload) ? 'inline' : 'attachment';
+
+    res.setHeader('Content-Type', att.mime_type || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `${disposition}; filename="${encodeURIComponent(att.original_name)}"`);
+    res.setHeader('Content-Length', att.size_bytes);
+
+    fs.createReadStream(filePath).pipe(res);
+  } catch (err) {
+    if (err.status === 404) {
+      return res.status(404).json({ error: 'ATTACHMENT_NOT_FOUND', message: 'Файл не найден или нет доступа' });
+    }
+    console.error(err);
+    res.status(500).json({ error: 'INTERNAL_ERROR' });
+  }
+});
+
+// ========================
 // Chat endpoint
 // ========================
 
@@ -251,14 +390,17 @@ app.get('/api/messages', requireAuth, async (req, res) => {
   }
 });
 
-app.post('/api/chat', requireAuth, async (req, res) => {
+app.post('/api/chat', requireAuth, upload.array('files', MAX_FILE_COUNT), handleMulterError, async (req, res) => {
   if (!N8N_WEBHOOK_URL) {
     return res.status(500).json({ error: 'N8N_WEBHOOK_URL_NOT_CONFIGURED' });
   }
 
-  const { message, conversationId } = req.body;
-  if (!message || typeof message !== 'string') {
-    return res.status(400).json({ error: 'MESSAGE_REQUIRED', message: 'Текст сообщения обязателен' });
+  const message = req.body.message;
+  const conversationId = req.body.conversationId;
+  const files = req.files || [];
+
+  if ((!message || typeof message !== 'string' || !message.trim()) && files.length === 0) {
+    return res.status(400).json({ error: 'MESSAGE_REQUIRED', message: 'Текст сообщения или файлы обязательны' });
   }
   if (!conversationId) {
     return res.status(400).json({ error: 'CONVERSATION_ID_REQUIRED', message: 'conversationId обязателен' });
@@ -273,26 +415,50 @@ app.post('/api/chat', requireAuth, async (req, res) => {
     const userId = req.session.userId;
     await db.assertConversationOwner(convId, userId);
 
-    await db.addMessage(convId, userId, 'user', message);
+    const messageText = (message || '').trim() || (files.length > 0 ? `[${files.length} файл(ов)]` : '');
+
+    const userMsg = await db.addMessage(convId, userId, 'user', messageText);
+
+    const savedAttachments = [];
+    for (const file of files) {
+      const ext = path.extname(file.originalname).toLowerCase();
+      const storedName = path.relative(UPLOADS_ROOT, file.path);
+      const att = await db.createAttachment(userId, file.originalname, storedName, file.mimetype, file.size, ext);
+      await db.linkAttachmentsToMessage(userMsg.id, [att.id]);
+      savedAttachments.push({
+        id: att.id,
+        original_name: att.original_name,
+        mime_type: att.mime_type,
+        size_bytes: att.size_bytes,
+        url: `/api/attachments/${att.id}`,
+      });
+    }
 
     const history = await db.getHistoryByConversation(convId, 20);
 
-    const n8nResponse = await axios.post(
-      N8N_WEBHOOK_URL,
-      { message, userId, conversationId: convId, history },
-      { timeout: 60_000 }
-    );
+    const n8nPayload = {
+      message: messageText,
+      userId,
+      conversationId: convId,
+      history,
+    };
+    if (savedAttachments.length > 0) {
+      n8nPayload.attachments = savedAttachments.map((a) => ({
+        name: a.original_name,
+        type: a.mime_type,
+        size: a.size_bytes,
+        url: a.url,
+      }));
+    }
+
+    const n8nResponse = await axios.post(N8N_WEBHOOK_URL, n8nPayload, { timeout: 60_000 });
 
     let reply;
     if (n8nResponse.data && typeof n8nResponse.data === 'object') {
-      reply =
-        n8nResponse.data.reply ||
-        n8nResponse.data.text ||
-        JSON.stringify(n8nResponse.data);
+      reply = n8nResponse.data.reply || n8nResponse.data.text || JSON.stringify(n8nResponse.data);
     } else {
       reply = String(n8nResponse.data ?? '');
     }
-
     if (!reply) {
       reply = 'Пустой ответ от n8n.';
     }
@@ -302,11 +468,19 @@ app.post('/api/chat', requireAuth, async (req, res) => {
 
     const conv = await db.getConversationById(convId);
     if (conv && !conv.title) {
-      const autoTitle = message.substring(0, 60);
+      const autoTitle = messageText.substring(0, 60);
       await db.setConversationTitle(convId, autoTitle);
     }
 
-    res.json({ reply });
+    res.json({
+      reply,
+      userMessage: {
+        id: userMsg.id,
+        role: 'user',
+        content: messageText,
+        attachments: savedAttachments,
+      },
+    });
   } catch (err) {
     if (err.status === 404) {
       return res.status(404).json({ error: 'CONVERSATION_NOT_FOUND', message: 'Диалог не найден или у вас нет доступа' });

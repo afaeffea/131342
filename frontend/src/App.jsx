@@ -139,7 +139,7 @@ export default function App() {
 
   // ------ Send message ------
 
-  async function handleSendMessage(text) {
+  async function handleSendMessage(text, files = []) {
     let convId = activeIdRef.current;
 
     if (!convId) {
@@ -159,18 +159,47 @@ export default function App() {
       }
     }
 
-    setMessages((prev) => [...prev, { role: 'user', content: text }]);
+    const optimisticAttachments = files.map((f, i) => ({
+      id: `pending-${i}`,
+      original_name: f.name,
+      mime_type: f.type,
+      size_bytes: f.size,
+      url: URL.createObjectURL(f),
+      _pending: true,
+    }));
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: 'user',
+        content: text || (files.length > 0 ? `[${files.length} файл(ов)]` : ''),
+        attachments: optimisticAttachments,
+      },
+    ]);
     setIsSending(true);
     setError('');
 
     try {
-      const data = await api.sendMessage(text, convId);
+      const data = await api.sendMessage(text, convId, files);
       if (activeIdRef.current === convId) {
-        setMessages((prev) => [
-          ...prev,
-          { role: 'assistant', content: data.reply },
-        ]);
+        setMessages((prev) => {
+          const updated = [...prev];
+          const lastUserIdx = updated.length - 1;
+          if (data.userMessage && updated[lastUserIdx]?.role === 'user') {
+            updated[lastUserIdx] = {
+              ...updated[lastUserIdx],
+              id: data.userMessage.id,
+              content: data.userMessage.content,
+              attachments: data.userMessage.attachments || [],
+            };
+          }
+          updated.push({ role: 'assistant', content: data.reply });
+          return updated;
+        });
       }
+      optimisticAttachments.forEach((a) => {
+        if (a._pending) URL.revokeObjectURL(a.url);
+      });
       await refreshConversations();
     } catch {
       setError('Не удалось отправить сообщение. Попробуйте ещё раз.');

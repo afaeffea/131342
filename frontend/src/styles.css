@@ -814,6 +814,173 @@ input::placeholder {
   }
 }
 
+/* ===== Attachments in messages ===== */
+.message-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.msg-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.att-image-link {
+  display: block;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  transition: box-shadow 0.15s ease;
+}
+
+.att-image-link:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.att-image-preview {
+  display: block;
+  max-width: 320px;
+  max-height: 240px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+.att-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: #f7f7f8;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  max-width: 380px;
+  width: 100%;
+}
+
+.att-file-icon {
+  flex-shrink: 0;
+}
+
+.att-file-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.att-file-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #202123;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.att-file-size {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.att-file-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.att-link {
+  font-size: 12px;
+  color: #10a37f;
+  text-decoration: none;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.att-link:hover {
+  text-decoration: underline;
+}
+
+/* ===== Attach button ===== */
+.attach-button {
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #6e6e80;
+  transition: all 0.15s ease;
+  padding: 0;
+  margin-right: 4px;
+}
+
+.attach-button:hover {
+  background: #f7f7f8;
+  color: #202123;
+}
+
+.file-input-hidden {
+  display: none;
+}
+
+/* ===== Pending files strip ===== */
+.pending-files {
+  max-width: 768px;
+  margin: 0 auto 8px;
+  padding: 0 24px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pending-file {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  font-size: 12px;
+  max-width: 260px;
+}
+
+.pending-file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #202123;
+  font-weight: 500;
+}
+
+.pending-file-size {
+  color: #6e6e80;
+  flex-shrink: 0;
+}
+
+.pending-file-remove {
+  background: none;
+  border: none;
+  color: #dc2626;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+.pending-file-remove:hover {
+  opacity: 1;
+}
+
 /* ===== Responsive ===== */
 @media (max-width: 768px) {
   .sidebar {

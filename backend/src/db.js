@@ -120,6 +120,39 @@ async function initSchema() {
       CREATE INDEX IF NOT EXISTS idx_messages_conversation_created ON messages(conversation_id, created_at ASC);
     `);
 
+    // Attachments table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS attachments (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        original_name TEXT NOT NULL,
+        stored_name TEXT NOT NULL,
+        mime_type TEXT,
+        size_bytes BIGINT NOT NULL,
+        ext TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_attachments_user_created
+        ON attachments(user_id, created_at DESC);
+    `);
+
+    // Message-attachment join table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS message_attachments (
+        message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+        attachment_id UUID NOT NULL REFERENCES attachments(id) ON DELETE CASCADE,
+        PRIMARY KEY (message_id, attachment_id)
+      );
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_message_attachments_message
+        ON message_attachments(message_id);
+      CREATE INDEX IF NOT EXISTS idx_message_attachments_attachment
+        ON message_attachments(attachment_id);
+    `);
+
     await client.query('COMMIT');
     console.log('✅ Database schema initialized');
   } catch (err) {
@@ -291,10 +324,25 @@ async function addMessage(conversationId, userId, role, content) {
 
 async function getConversationMessages(conversationId, limit = 200) {
   const result = await pool.query(
-    `SELECT id, role, content, created_at 
-     FROM messages 
-     WHERE conversation_id = $1 
-     ORDER BY id ASC 
+    `SELECT m.id, m.role, m.content, m.created_at,
+       COALESCE(
+         json_agg(
+           json_build_object(
+             'id', a.id,
+             'original_name', a.original_name,
+             'mime_type', a.mime_type,
+             'size_bytes', a.size_bytes,
+             'url', '/api/attachments/' || a.id
+           )
+         ) FILTER (WHERE a.id IS NOT NULL),
+         '[]'::json
+       ) AS attachments
+     FROM messages m
+     LEFT JOIN message_attachments ma ON ma.message_id = m.id
+     LEFT JOIN attachments a ON a.id = ma.attachment_id
+     WHERE m.conversation_id = $1
+     GROUP BY m.id
+     ORDER BY m.id ASC
      LIMIT $2`,
     [conversationId, limit]
   );
@@ -350,6 +398,52 @@ async function getUserCount() {
   return parseInt(result.rows[0].count);
 }
 
+// ========================
+// Attachment functions
+// ========================
+
+async function createAttachment(userId, originalName, storedName, mimeType, sizeBytes, ext) {
+  const result = await pool.query(
+    `INSERT INTO attachments (user_id, original_name, stored_name, mime_type, size_bytes, ext)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id, user_id, original_name, stored_name, mime_type, size_bytes, ext, created_at`,
+    [userId, originalName, storedName, mimeType, sizeBytes, ext]
+  );
+  return result.rows[0];
+}
+
+async function linkAttachmentsToMessage(messageId, attachmentIds) {
+  if (!attachmentIds || attachmentIds.length === 0) return;
+  const values = attachmentIds.map((aid, i) => `($1, $${i + 2})`).join(', ');
+  const params = [messageId, ...attachmentIds];
+  await pool.query(
+    `INSERT INTO message_attachments (message_id, attachment_id) VALUES ${values}
+     ON CONFLICT DO NOTHING`,
+    params
+  );
+}
+
+async function getAttachmentById(attachmentId) {
+  const result = await pool.query(
+    'SELECT * FROM attachments WHERE id = $1',
+    [attachmentId]
+  );
+  return result.rows[0] || null;
+}
+
+async function assertAttachmentOwner(attachmentId, userId) {
+  const result = await pool.query(
+    'SELECT id FROM attachments WHERE id = $1 AND user_id = $2',
+    [attachmentId, userId]
+  );
+  if (result.rows.length === 0) {
+    const err = new Error('ATTACHMENT_NOT_FOUND');
+    err.status = 404;
+    throw err;
+  }
+  return true;
+}
+
 async function closePool() {
   await pool.end();
 }
@@ -374,5 +468,9 @@ module.exports = {
   getHistory,
   getMessageCount,
   getUserCount,
+  createAttachment,
+  linkAttachmentsToMessage,
+  getAttachmentById,
+  assertAttachmentOwner,
   closePool,
 };

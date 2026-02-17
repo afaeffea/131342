@@ -37,3 +37,7 @@ build/
 # Temporary files
 tmp/
 temp/
+
+# Uploaded files (keep .gitkeep)
+backend/uploads/*
+!backend/uploads/.gitkeep
