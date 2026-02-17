@@ -1,23 +1,35 @@
 const { Pool } = require('pg');
 
-// Support Railway's DATABASE_URL or individual env vars
+// Railway may expose DB connection as DATABASE_URL, DATABASE_PRIVATE_URL, or PGHOST etc.
+const connectionString =
+  process.env.DATABASE_URL ||
+  process.env.DATABASE_PRIVATE_URL ||
+  process.env.DATABASE_PUBLIC_URL;
+
+const isProduction = process.env.NODE_ENV === 'production';
+
 const pool = new Pool(
-  process.env.DATABASE_URL
+  connectionString
     ? {
-        connectionString: process.env.DATABASE_URL,
-        ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-      }
-    : {
-        host: process.env.DB_HOST || 'localhost',
-        port: parseInt(process.env.DB_PORT || '5432'),
-        database: process.env.DB_NAME || 'lawyer_chatbot',
-        user: process.env.DB_USER || 'postgres',
-        password: process.env.DB_PASSWORD || '',
+        connectionString,
+        ssl: isProduction ? { rejectUnauthorized: false } : false,
         max: 20,
         idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 2000,
+        connectionTimeoutMillis: 10000,
+      }
+    : {
+        host: process.env.PGHOST || process.env.DB_HOST || 'localhost',
+        port: parseInt(process.env.PGPORT || process.env.DB_PORT || '5432'),
+        database: process.env.PGDATABASE || process.env.DB_NAME || 'lawyer_chatbot',
+        user: process.env.PGUSER || process.env.DB_USER || 'postgres',
+        password: process.env.PGPASSWORD || process.env.DB_PASSWORD || '',
+        max: 20,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 10000,
       }
 );
+
+console.log('🔧 DB config:', connectionString ? 'Using DATABASE_URL' : `Using ${process.env.PGHOST || process.env.DB_HOST || 'localhost'}:${process.env.PGPORT || process.env.DB_PORT || '5432'}`);
 
 pool.on('connect', () => {
   console.log('✅ PostgreSQL connected');
@@ -25,7 +37,6 @@ pool.on('connect', () => {
 
 pool.on('error', (err) => {
   console.error('❌ Unexpected PostgreSQL error:', err);
-  process.exit(-1);
 });
 
 // Initialize database schema
@@ -120,10 +131,26 @@ async function initSchema() {
   }
 }
 
-initSchema().catch((err) => {
-  console.error('Failed to initialize database:', err);
-  process.exit(1);
-});
+// Retry schema init — on Railway, Postgres may take a few seconds to become available
+(async function initWithRetry() {
+  const maxRetries = 5;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      await initSchema();
+      return;
+    } catch (err) {
+      console.error(`❌ initSchema attempt ${attempt}/${maxRetries} failed:`, err.message);
+      if (attempt < maxRetries) {
+        const delay = attempt * 3000;
+        console.log(`⏳ Retrying in ${delay / 1000}s...`);
+        await new Promise((r) => setTimeout(r, delay));
+      } else {
+        console.error('💀 All init attempts failed. Exiting.');
+        process.exit(1);
+      }
+    }
+  }
+})();
 
 // ========================
 // User functions

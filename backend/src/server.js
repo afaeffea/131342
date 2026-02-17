@@ -315,6 +315,5 @@ process.on('SIGINT', async () => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server is running on http://localhost:${PORT}`);
-  console.log(`📊 Database: ${process.env.DATABASE_URL ? '(Railway)' : process.env.DB_NAME || 'lawyer_chatbot'}`);
+  console.log(`🚀 Server is running on port ${PORT}`);
 });
