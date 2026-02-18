@@ -292,7 +292,7 @@ app.delete('/api/conversations/:id', requireAuth, async (req, res) => {
     }
 
     await db.assertConversationOwner(conversationId, req.session.userId);
-    await db.archiveConversation(conversationId);
+    await db.deleteConversation(conversationId);
     res.json({ ok: true });
   } catch (err) {
     if (err.status === 404) {

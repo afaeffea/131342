@@ -283,15 +283,11 @@ async function renameConversation(conversationId, title) {
   return result.rows[0];
 }
 
-async function archiveConversation(conversationId) {
-  const result = await pool.query(
-    `UPDATE conversations
-     SET archived_at = NOW(), updated_at = NOW()
-     WHERE id = $1
-     RETURNING id, archived_at`,
+async function deleteConversation(conversationId) {
+  await pool.query(
+    'DELETE FROM conversations WHERE id = $1',
     [conversationId]
   );
-  return result.rows[0];
 }
 
 async function updateConversationTimestamp(conversationId) {
@@ -458,7 +454,6 @@ module.exports = {
   getConversationById,
   assertConversationOwner,
   renameConversation,
-  archiveConversation,
   updateConversationTimestamp,
   setConversationTitle,
   addMessage,
@@ -472,5 +467,6 @@ module.exports = {
   linkAttachmentsToMessage,
   getAttachmentById,
   assertAttachmentOwner,
+  deleteConversation,
   closePool,
 };
