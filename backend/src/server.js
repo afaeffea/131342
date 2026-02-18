@@ -436,22 +436,42 @@ app.post('/api/chat', requireAuth, upload.array('files', MAX_FILE_COUNT), handle
 
     const history = await db.getHistoryByConversation(convId, 20);
 
+    const n8nAttachments = [];
+    for (const att of savedAttachments) {
+      const entry = {
+        name: att.original_name,
+        type: att.mime_type,
+        size: att.size_bytes,
+      };
+
+      if (att.mime_type && att.mime_type.startsWith('image/')) {
+        const dbAtt = await db.getAttachmentById(att.id);
+        if (dbAtt) {
+          const filePath = path.join(UPLOADS_ROOT, dbAtt.stored_name);
+          if (fs.existsSync(filePath)) {
+            const buf = fs.readFileSync(filePath);
+            entry.base64 = `data:${att.mime_type};base64,${buf.toString('base64')}`;
+          }
+        }
+      }
+
+      n8nAttachments.push(entry);
+    }
+
     const n8nPayload = {
       message: messageText,
       userId,
       conversationId: convId,
       history,
     };
-    if (savedAttachments.length > 0) {
-      n8nPayload.attachments = savedAttachments.map((a) => ({
-        name: a.original_name,
-        type: a.mime_type,
-        size: a.size_bytes,
-        url: a.url,
-      }));
+    if (n8nAttachments.length > 0) {
+      n8nPayload.attachments = n8nAttachments;
     }
 
-    const n8nResponse = await axios.post(N8N_WEBHOOK_URL, n8nPayload, { timeout: 60_000 });
+    const n8nResponse = await axios.post(N8N_WEBHOOK_URL, n8nPayload, {
+      timeout: 120_000,
+      maxBodyLength: 100 * 1024 * 1024,
+    });
 
     let reply;
     if (n8nResponse.data && typeof n8nResponse.data === 'object') {
